@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Web Downloader</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="glass-container">
+        <header>
+            <div class="logo">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <h1>Telegram Downloader</h1>
+            </div>
+            <div class="header-right" style="display: flex; align-items: center; gap: 15px;">
+                <div class="status-indicator">
+                    <span id="connection-status" class="dot"></span>
+                    <span id="connection-text">Connecting...</span>
+                </div>
+                <button id="settings-btn" class="icon-btn" title="Settings" style="background: none; border: none; color: #a1a1aa; cursor: pointer;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                </button>
+            </div>
+        </header>
+
+        {% if not authorized %}
+        <div id="auth-section" class="auth-panel">
+            <h2>Login to Telegram</h2>
+            <p>Your session is not authorized. Please enter your phone number.</p>
+            
+            <div id="phone-step">
+                <input type="text" id="phone-input" placeholder="+1234567890">
+                <button id="send-code-btn">Send Code</button>
+            </div>
+            
+            <div id="code-step" style="display: none;">
+                <input type="text" id="code-input" placeholder="12345">
+                <button id="verify-code-btn">Verify</button>
+            </div>
+            <div id="auth-error" class="error-text"></div>
+        </div>
+        {% else %}
+        
+        <div class="input-panel">
+            <input type="text" id="url-input" placeholder="Paste Telegram Video URL here (e.g. https://t.me/c/123/456)">
+            <button id="add-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Download
+            </button>
+        </div>
+        <div id="add-error" class="error-text" style="display:none; margin-top: 10px; padding: 0 20px;"></div>
+
+        <div class="downloads-container">
+            <div class="section-title">Active Downloads</div>
+            <div id="downloads-list">
+                <!-- Downloads injected here by JS -->
+            </div>
+        </div>
+        
+        {% endif %}
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content glass-container" style="max-width: 500px; width: 100%; position: relative;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; font-size: 1.25rem;">Settings</h2>
+                <button id="close-settings-btn" style="background: none; border: none; color: #a1a1aa; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-tabs" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <button class="tab-btn active" data-tab="local">Local Folder</button>
+                    <button class="tab-btn" data-tab="smb">Samba Share</button>
+                </div>
+                
+                <div id="tab-local" class="tab-content active">
+                    <div class="form-group">
+                        <label>Local Download Path (Inside Container)</label>
+                        <input type="text" id="setting-local-path" placeholder="/app/downloads">
+                    </div>
+                </div>
+                
+                <div id="tab-smb" class="tab-content" style="display: none;">
+                    <div class="form-group">
+                        <label>Samba Server IP</label>
+                        <input type="text" id="setting-smb-server" placeholder="192.168.1.100">
+                    </div>
+                    <div class="form-group">
+                        <label>Share Name</label>
+                        <input type="text" id="setting-smb-share" placeholder="Storage">
+                    </div>
+                    <div class="form-group">
+                        <label>Path inside Share (Optional)</label>
+                        <input type="text" id="setting-smb-path" placeholder="downloads/telegram">
+                    </div>
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" id="setting-smb-user" placeholder="admin">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="setting-smb-pass" placeholder="••••••••">
+                    </div>
+                </div>
+                
+                <div id="settings-error" class="error-text" style="display:none; margin-bottom: 10px;"></div>
+                <button id="save-settings-btn" class="primary-btn" style="width: 100%;">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const isAuthorized = {{ 'true' if authorized else 'false' }};
+
+        window.copyToClipboard = function(text) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).catch(e => fallbackCopy(text));
+            } else {
+                fallbackCopy(text);
+            }
+        };
+
+        function fallbackCopy(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try { document.execCommand('copy'); } catch (err) {}
+            document.body.removeChild(textArea);
+        }
+        
+        if (!isAuthorized) {
+            document.getElementById('send-code-btn').addEventListener('click', async () => {
+                const phone = document.getElementById('phone-input').value;
+                const err = document.getElementById('auth-error');
+                err.innerText = "Sending...";
+                
+                try {
+                    const res = await fetch('/api/auth/send_code', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({phone})
+                    });
+                    if (res.ok) {
+                        document.getElementById('phone-step').style.display = 'none';
+                        document.getElementById('code-step').style.display = 'block';
+                        err.innerText = "";
+                    } else {
+                        const data = await res.json();
+                        err.innerText = data.detail || "Error sending code";
+                    }
+                } catch(e) {
+                    err.innerText = e.toString();
+                }
+            });
+
+            document.getElementById('verify-code-btn').addEventListener('click', async () => {
+                const code = document.getElementById('code-input').value;
+                const err = document.getElementById('auth-error');
+                err.innerText = "Verifying...";
+                try {
+                    const res = await fetch('/api/auth/verify_code', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({code})
+                    });
+                    if (res.ok) {
+                        window.location.reload();
+                    } else {
+                        const data = await res.json();
+                        err.innerText = data.detail || "Error verifying code";
+                    }
+                } catch(e) {
+                    err.innerText = e.toString();
+                }
+            });
+        } else {
+            // Main App Logic
+            const addBtn = document.getElementById('add-btn');
+            const urlInput = document.getElementById('url-input');
+            const addErr = document.getElementById('add-error');
+            const list = document.getElementById('downloads-list');
+
+            urlInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addBtn.click();
+                }
+            });
+
+            addBtn.addEventListener('click', async () => {
+                const url = urlInput.value;
+                if(!url) return;
+                
+                addBtn.disabled = true;
+                addBtn.innerHTML = "Adding...";
+                addErr.style.display = 'none';
+                
+                try {
+                    const res = await fetch('/api/downloads', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({url})
+                    });
+                    const data = await res.json();
+                    if(res.ok) {
+                        urlInput.value = "";
+                        fetchDownloads();
+                    } else {
+                        addErr.innerText = data.detail || "Error adding URL";
+                        addErr.style.display = 'block';
+                    }
+                } catch(e) {
+                    addErr.innerText = e.toString();
+                    addErr.style.display = 'block';
+                }
+                
+                addBtn.disabled = false;
+                addBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Download`;
+            });
+
+            window.cancelDownload = async function(id) {
+                await fetch(`/api/downloads/${id}`, {method: 'DELETE'});
+                fetchDownloads();
+            }
+
+            window.restartDownload = function(url) {
+                document.getElementById('url-input').value = url;
+                document.getElementById('add-btn').click();
+            }
+
+            function formatBytes(mb) {
+                if (mb < 1024) return mb.toFixed(1) + " MB";
+                return (mb / 1024).toFixed(2) + " GB";
+            }
+
+            async function fetchDownloads() {
+                try {
+                    const res = await fetch('/api/downloads');
+                    if(res.ok) {
+                        const data = await res.json();
+                        renderDownloads(data.downloads);
+                        document.getElementById('connection-status').className = 'dot active';
+                        document.getElementById('connection-text').innerText = 'Connected';
+                    }
+                } catch(e) {
+                    document.getElementById('connection-status').className = 'dot inactive';
+                    document.getElementById('connection-text').innerText = 'Disconnected';
+                }
+            }
+
+            function renderDownloads(downloads) {
+                let html = '';
+                
+                const keys = Object.keys(downloads).sort((a, b) => {
+                    const timeA = downloads[a].created_at || 0;
+                    const timeB = downloads[b].created_at || 0;
+                    return timeB - timeA;
+                });
+                
+                if (keys.length === 0) {
+                    list.innerHTML = `<div class="empty-state">No downloads yet. Paste a link above to start!</div>`;
+                    return;
+                }
+
+                for(let key of keys) {
+                    const d = downloads[key];
+                    let percent = 0;
+                    if(d.total_mb > 0) percent = (d.downloaded_mb / d.total_mb) * 100;
+                    if(percent > 100) percent = 100;
+                    
+                    let statusClass = "status-badge " + d.status;
+                    let actionBtn = "";
+                    
+                    if (d.status === "queue" || d.status === "downloading") {
+                        actionBtn = `<button class="cancel-btn" onclick="cancelDownload(${key})">Cancel</button>`;
+                    } else if (d.status === "done" && d.storage_type === "local") {
+                        actionBtn = `<a href="/api/download_file/${key}" download class="save-pc-btn" style="text-decoration:none; background:var(--accent); color:white; padding:6px 14px; border-radius:6px; font-size:0.8rem; font-weight:600; display:inline-block; transition:0.2s;">Save to PC &darr;</a>`;
+                    } else if (d.status === "cancelled" || d.status.startsWith("error")) {
+                        actionBtn = `<button class="cancel-btn" style="color:var(--accent); border-color:var(--accent);" onclick="restartDownload('${d.url}')">Restart</button>`;
+                    }
+
+                    html += `
+                    <div class="download-card">
+                        <div class="card-header">
+                            <div class="info">
+                                <span class="id" title="ID: ${key}">${d.file_name ? d.file_name : 'ID: ' + key}</span>
+                                <span class="${statusClass}">${d.status.toUpperCase()}</span>
+                            </div>
+                            ${actionBtn}
+                        </div>
+                        
+                        <div class="progress-container">
+                            <div class="progress-fill" style="width: ${percent}%"></div>
+                        </div>
+                        
+                        <div class="stats">
+                            <span>${formatBytes(d.downloaded_mb)} / ${formatBytes(d.total_mb)}</span>
+                            <span>${percent.toFixed(1)}%</span>
+                        </div>
+                        
+                        <div class="meta" style="display:flex; justify-content:space-between; width:100%;">
+                            <div style="display:flex; gap:20px;">
+                                <span>🚀 ${d.speed_mbps.toFixed(2)} MB/s</span>
+                                <span>⏳ ${d.eta}</span>
+                            </div>
+                            <button class="cancel-btn" style="padding: 2px 8px; font-size: 0.75rem; border: none; background: rgba(255,255,255,0.05); color: var(--text-muted); cursor: pointer;" onclick="copyToClipboard('${d.url}')" title="Copy URL">🔗 Copy Link</button>
+                        </div>
+                    </div>
+                    `;
+                }
+                list.innerHTML = html;
+            }
+
+            // Poll every 1 second
+            setInterval(fetchDownloads, 1000);
+            fetchDownloads();
+        }
+
+        // Global Settings logic
+        let currentStorageType = "local";
+        const settingsModal = document.getElementById('settings-modal');
+        const settingsBtn = document.getElementById('settings-btn');
+        const closeSettingsBtn = document.getElementById('close-settings-btn');
+        const saveSettingsBtn = document.getElementById('save-settings-btn');
+        const settingsErr = document.getElementById('settings-error');
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                tabBtns.forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                
+                document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+                currentStorageType = e.target.dataset.tab;
+                document.getElementById('tab-' + currentStorageType).style.display = 'block';
+            });
+        });
+
+        if (settingsBtn) {
+            settingsBtn.addEventListener('click', async () => {
+                try {
+                    const res = await fetch('/api/settings');
+                    if (res.ok) {
+                        const data = await res.json();
+                        currentStorageType = data.storage_type || "local";
+                        
+                        document.getElementById('setting-local-path').value = data.local_path || "";
+                        document.getElementById('setting-smb-server').value = data.smb_server || "";
+                        document.getElementById('setting-smb-share').value = data.smb_share || "";
+                        document.getElementById('setting-smb-path').value = data.smb_path || "";
+                        document.getElementById('setting-smb-user').value = data.smb_user || "";
+                        document.getElementById('setting-smb-pass').value = data.smb_pass || "";
+                        
+                        tabBtns.forEach(b => {
+                            if (b.dataset.tab === currentStorageType) b.click();
+                        });
+                        
+                        settingsModal.style.display = 'flex';
+                    }
+                } catch(e) {
+                    console.error("Could not fetch settings", e);
+                }
+            });
+        }
+        
+        if (closeSettingsBtn) {
+            closeSettingsBtn.addEventListener('click', () => {
+                settingsModal.style.display = 'none';
+            });
+        }
+        
+        if (saveSettingsBtn) {
+            saveSettingsBtn.addEventListener('click', async () => {
+                saveSettingsBtn.disabled = true;
+                saveSettingsBtn.innerText = "Saving...";
+                settingsErr.style.display = 'none';
+                
+                const payload = {
+                    storage_type: currentStorageType,
+                    local_path: document.getElementById('setting-local-path').value,
+                    smb_server: document.getElementById('setting-smb-server').value,
+                    smb_share: document.getElementById('setting-smb-share').value,
+                    smb_path: document.getElementById('setting-smb-path').value,
+                    smb_user: document.getElementById('setting-smb-user').value,
+                    smb_pass: document.getElementById('setting-smb-pass').value,
+                };
+                
+                try {
+                    const res = await fetch('/api/settings', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(payload)
+                    });
+                    if (res.ok) {
+                        settingsModal.style.display = 'none';
+                    } else {
+                        settingsErr.innerText = "Error saving settings";
+                        settingsErr.style.display = 'block';
+                    }
+                } catch(e) {
+                    settingsErr.innerText = e.toString();
+                    settingsErr.style.display = 'block';
+                }
+                
+                saveSettingsBtn.disabled = false;
+                saveSettingsBtn.innerText = "Save Settings";
+            });
+        }
+    </script>
+</body>
+</html>

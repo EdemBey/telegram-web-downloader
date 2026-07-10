@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  telegram-web-downloader:
+    build: .
+    image: telegram-web-downloader
+    container_name: telegram-web-downloader
+    restart: unless-stopped
+    ports:
+      - "44321:44321"
+    env_file:
+      - .env
+    volumes:
+      - truenas_downloads:/app/downloads
+      - telegram_session:/app/data
+
+volumes:
+  telegram_session:
+  truenas_downloads:

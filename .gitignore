@@ -1,0 +1,8 @@
+.env
+.DS_Store
+._*
+downloads/
+data/
+session/
+__pycache__/
+settings.json
