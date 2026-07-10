@@ -2,8 +2,6 @@
 
 A sleek, web-based, dockerized application to seamlessly download Telegram videos directly to your local machine or a remote Samba (SMB) network share.
 
-<!-- ПЕРЕТАЩИТЕ ВАШ СКРИНШОТ СЮДА, прямо под эту строчку, в редакторе на GitHub -->
-
 ## ✨ Features
 - **Web UI:** Modern, responsive glassmorphism interface.
 - **Direct Telegram Downloads:** Just paste a Telegram video link, and the app handles the rest.
@@ -24,16 +22,28 @@ services:
     container_name: telegram-web-downloader
     ports:
       - "44321:44321"
+    env_file:
+      - .env
     volumes:
       - ./data:/app/data
       - ./downloads:/app/downloads
     restart: unless-stopped
 ```
 
-1. Create a `docker-compose.yml` file with the content above.
-2. Run `docker compose up -d`.
-3. Open `http://<your-ip>:44321` in your browser.
-4. **Log in:** The first time you open the app, it will ask for your Telegram phone number and a verification code to authorize the session.
+1. **Get your Telegram API credentials:**
+   Go to [my.telegram.org](https://my.telegram.org) (under API development tools) and get your **API_ID** and **API_HASH**.
+
+2. **Create configuration files:**
+   Create a `docker-compose.yml` with the content above, and in the same directory create a `.env` file with your credentials:
+   ```env
+   API_ID=1234567
+   API_HASH=your_api_hash_here
+   ```
+   *(If you are deploying via Portainer, TrueNAS, or Synology UI, simply add `API_ID` and `API_HASH` as environment variables).*
+
+3. Run `docker compose up -d`.
+4. Open `http://<your-ip>:44321` in your browser.
+5. **Log in:** The first time you open the app, it will ask for your Telegram phone number and a verification code to authorize the session.
 
 ## ⚙️ Configuration (Samba & Local Storage)
 

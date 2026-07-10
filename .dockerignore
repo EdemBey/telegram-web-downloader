@@ -1,0 +1,9 @@
+.env
+data/
+downloads/
+session
+session.session
+__pycache__/
+.git/
+.gitignore
+*.log
