@@ -341,7 +341,10 @@
                     const idWrapper = card.querySelector('.id-wrapper');
                     const idText = card.querySelector('.id-text');
                     if (idWrapper.title !== filename) idWrapper.title = filename;
-                    if (idText.textContent !== filename) idText.textContent = filename;
+                    if (idText.textContent !== filename) {
+                        idText.textContent = filename;
+                        idText.setAttribute('data-text', filename);
+                    }
                     
                     const badge = card.querySelector('.status-badge-el');
                     badge.className = `status-badge-el ${statusClass}`;

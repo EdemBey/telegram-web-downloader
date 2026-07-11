@@ -195,17 +195,30 @@ button:disabled {
     text-overflow: ellipsis;
     max-width: 100%;
     vertical-align: middle;
+    position: relative;
 }
 
 .id-wrapper:hover .id-text {
     overflow: visible;
     text-overflow: clip;
-    animation: marquee-scroll 4s linear infinite alternate;
+    max-width: none;
+    /* 1. First run: 0.5s delay, 8s duration, ease-in acceleration (runs once) */
+    /* 2. Infinite run: starts after 8.5s, 8s duration, linear speed (seamless loop) */
+    animation: 
+        marquee-scroll 8s ease-in 0.5s 1,
+        marquee-scroll 8s linear 8.5s infinite;
+}
+
+.id-wrapper:hover .id-text::after {
+    content: attr(data-text);
+    position: absolute;
+    left: 100%;
+    padding-left: 40px;
 }
 
 @keyframes marquee-scroll {
     0% { transform: translateX(0); }
-    100% { transform: translateX(calc(-100% + 250px)); }
+    100% { transform: translateX(calc(-100% - 40px)); }
 }
 
 .status-badge {
