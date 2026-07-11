@@ -256,8 +256,6 @@
             }
 
             function renderDownloads(downloads) {
-                let html = '';
-                
                 const keys = Object.keys(downloads).sort((a, b) => {
                     const timeA = downloads[a].created_at || 0;
                     const timeB = downloads[b].created_at || 0;
@@ -269,6 +267,19 @@
                     return;
                 }
 
+                // Remove empty state if it exists
+                const emptyState = list.querySelector('.empty-state');
+                if (emptyState) emptyState.remove();
+
+                // Track existing cards
+                const existingCards = Array.from(list.querySelectorAll('.download-card'));
+                const newKeys = new Set(keys);
+                
+                // Remove deleted cards
+                existingCards.forEach(card => {
+                    if (!newKeys.has(card.dataset.id)) card.remove();
+                });
+
                 for(let key of keys) {
                     const d = downloads[key];
                     let percent = 0;
@@ -279,43 +290,85 @@
                     let actionBtn = "";
                     
                     if (d.status === "queue" || d.status === "downloading") {
-                        actionBtn = `<button class="cancel-btn" onclick="cancelDownload(${key})">Cancel</button>`;
+                        actionBtn = `<button class="cancel-btn" onclick="cancelDownload('${key}')">Cancel</button>`;
                     } else if (d.status === "done" && d.storage_type === "local") {
                         actionBtn = `<a href="/api/download_file/${key}" download class="save-pc-btn" style="text-decoration:none; background:var(--accent); color:white; padding:6px 14px; border-radius:6px; font-size:0.8rem; font-weight:600; display:inline-block; transition:0.2s;">Save to PC &darr;</a>`;
                     } else if (d.status === "cancelled" || d.status.startsWith("error")) {
                         actionBtn = `<button class="cancel-btn" style="color:var(--accent); border-color:var(--accent);" onclick="restartDownload('${d.url}')">Restart</button>`;
                     }
 
-                    html += `
-                    <div class="download-card">
+                    let card = document.querySelector(`.download-card[data-id="${key}"]`);
+                    if (!card) {
+                        card = document.createElement('div');
+                        card.className = 'download-card';
+                        card.dataset.id = key;
+                        card.innerHTML = `
                         <div class="card-header">
                             <div class="info">
-                                <span class="id" title="ID: ${key}">${d.file_name ? d.file_name : 'ID: ' + key}</span>
-                                <span class="${statusClass}">${d.status.toUpperCase()}</span>
+                                <div class="id-wrapper" title="">
+                                    <span class="id-text"></span>
+                                </div>
+                                <span class="status-badge-el"></span>
                             </div>
-                            ${actionBtn}
+                            <div class="action-container"></div>
                         </div>
                         
                         <div class="progress-container">
-                            <div class="progress-fill" style="width: ${percent}%"></div>
+                            <div class="progress-fill"></div>
                         </div>
                         
                         <div class="stats">
-                            <span>${formatBytes(d.downloaded_mb)} / ${formatBytes(d.total_mb)}</span>
-                            <span>${percent.toFixed(1)}%</span>
+                            <span class="stats-text"></span>
+                            <span class="stats-percent"></span>
                         </div>
                         
                         <div class="meta" style="display:flex; justify-content:space-between; width:100%;">
                             <div style="display:flex; gap:20px;">
-                                <span>🚀 ${d.speed_mbps.toFixed(2)} MB/s</span>
-                                <span>⏳ ${d.eta}</span>
+                                <span class="meta-speed"></span>
+                                <span class="meta-eta"></span>
                             </div>
-                            <button class="cancel-btn" style="padding: 2px 8px; font-size: 0.75rem; border: none; background: rgba(255,255,255,0.05); color: var(--text-muted); cursor: pointer;" onclick="copyToClipboard('${d.url}')" title="Copy URL">🔗 Copy Link</button>
+                            <button class="cancel-btn copy-btn" style="padding: 2px 8px; font-size: 0.75rem; border: none; background: rgba(255,255,255,0.05); color: var(--text-muted); cursor: pointer;" title="Copy URL">🔗 Copy Link</button>
                         </div>
-                    </div>
-                    `;
+                        `;
+                        
+                        // Set constant event listeners
+                        card.querySelector('.copy-btn').onclick = () => copyToClipboard(d.url);
+                        list.appendChild(card);
+                    }
+                    
+                    // Update content dynamically
+                    const filename = d.file_name ? d.file_name : 'ID: ' + key;
+                    const idWrapper = card.querySelector('.id-wrapper');
+                    const idText = card.querySelector('.id-text');
+                    if (idWrapper.title !== filename) idWrapper.title = filename;
+                    if (idText.textContent !== filename) idText.textContent = filename;
+                    
+                    const badge = card.querySelector('.status-badge-el');
+                    badge.className = `status-badge-el ${statusClass}`;
+                    if (badge.textContent !== d.status.toUpperCase()) badge.textContent = d.status.toUpperCase();
+                    
+                    const actionContainer = card.querySelector('.action-container');
+                    if (actionContainer.innerHTML !== actionBtn) actionContainer.innerHTML = actionBtn;
+                    
+                    const progressFill = card.querySelector('.progress-fill');
+                    progressFill.style.width = `${percent}%`;
+                    
+                    const statsText = card.querySelector('.stats-text');
+                    const newStatsText = `${formatBytes(d.downloaded_mb)} / ${formatBytes(d.total_mb)}`;
+                    if (statsText.textContent !== newStatsText) statsText.textContent = newStatsText;
+                    
+                    const statsPercent = card.querySelector('.stats-percent');
+                    const newStatsPercent = `${percent.toFixed(1)}%`;
+                    if (statsPercent.textContent !== newStatsPercent) statsPercent.textContent = newStatsPercent;
+                    
+                    const metaSpeed = card.querySelector('.meta-speed');
+                    const newSpeed = `🚀 ${d.speed_mbps.toFixed(2)} MB/s`;
+                    if (metaSpeed.textContent !== newSpeed) metaSpeed.textContent = newSpeed;
+                    
+                    const metaEta = card.querySelector('.meta-eta');
+                    const newEta = `⏳ ${d.eta}`;
+                    if (metaEta.textContent !== newEta) metaEta.textContent = newEta;
                 }
-                list.innerHTML = html;
             }
 
             // Poll every 1 second

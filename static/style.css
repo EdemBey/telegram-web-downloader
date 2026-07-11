@@ -96,6 +96,7 @@ header {
 
 input[type="text"] {
     flex: 1;
+    min-width: 0; /* Fix flexbox blowout */
     background: transparent;
     border: none;
     color: white;
@@ -165,18 +166,46 @@ button:disabled {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 16px;
 }
 
 .info {
     display: flex;
     align-items: center;
     gap: 12px;
+    flex: 1;
+    min-width: 0;
 }
 
-.id {
+.id-wrapper {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    position: relative;
+    white-space: nowrap;
+}
+
+.id-text {
+    display: inline-block;
     font-family: monospace;
     color: var(--text-muted);
     font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    vertical-align: middle;
+}
+
+.id-wrapper:hover .id-text {
+    overflow: visible;
+    text-overflow: clip;
+    animation: marquee-scroll 4s linear infinite alternate;
+}
+
+@keyframes marquee-scroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(calc(-100% + 250px)); }
 }
 
 .status-badge {
@@ -192,6 +221,16 @@ button:disabled {
 .status-badge.done { background: rgba(16, 185, 129, 0.2); color: #34d399; }
 .status-badge.error { background: rgba(239, 68, 68, 0.2); color: #f87171; }
 .status-badge.cancelled { background: rgba(107, 114, 128, 0.2); color: #9ca3af; }
+
+.status-badge-el {
+    flex-shrink: 0;
+}
+
+.action-container {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
 
 .cancel-btn {
     background: transparent;
@@ -321,4 +360,67 @@ button:disabled {
 .primary-btn {
     width: 100%;
     justify-content: center;
+}
+
+/* Mobile Responsive */
+@media (max-width: 600px) {
+    .glass-container {
+        padding: 1.25rem;
+    }
+    
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+    
+    .header-right {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .input-panel {
+        flex-direction: column;
+    }
+    
+    .input-panel button {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    
+    .info {
+        width: 100%;
+    }
+    
+    .action-container {
+        width: 100%;
+    }
+    
+    .action-container button, .action-container a {
+        width: 100%;
+        text-align: center;
+        justify-content: center;
+    }
+    
+    .meta {
+        flex-direction: column;
+        gap: 10px !important;
+        align-items: flex-start;
+    }
+    
+    .meta > div {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .meta button {
+        width: 100%;
+        text-align: center;
+    }
 }
