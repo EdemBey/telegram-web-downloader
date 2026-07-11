@@ -5,7 +5,7 @@
 
 A sleek, web-based, dockerized application to seamlessly download Telegram videos directly to your local machine or a remote Samba (SMB) network share.
 
-![alt text](image-1.png)
+![UI Screenshot](https://raw.githubusercontent.com/EdemBey/telegram-web-downloader/main/image-1.png)
 
 ## ✨ Features
 - **Web UI:** Modern, responsive glassmorphism interface.
