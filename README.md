@@ -1,5 +1,8 @@
 # Telegram Web Downloader 🚀
 
+[![Docker Pulls](https://img.shields.io/docker/pulls/edembey/telegram-web-downloader.svg?logo=docker)](https://hub.docker.com/r/edembey/telegram-web-downloader)
+[![Docker Image Size](https://img.shields.io/docker/image-size/edembey/telegram-web-downloader/latest?logo=docker)](https://hub.docker.com/r/edembey/telegram-web-downloader)
+
 A sleek, web-based, dockerized application to seamlessly download Telegram videos directly to your local machine or a remote Samba (SMB) network share.
 
 ![alt text](image-1.png)
