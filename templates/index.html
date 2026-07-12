@@ -113,6 +113,47 @@
         </div>
     </div>
 
+    <!-- Delete Modal -->
+    <div id="delete-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content glass-container" style="max-width: 400px; width: 100%; position: relative;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; font-size: 1.25rem;">Remove Item</h2>
+                <button id="close-delete-btn" style="background: none; border: none; color: #a1a1aa; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to remove this item from the list?</p>
+                <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 15px;">
+                    <input type="checkbox" id="delete-file-checkbox" style="width: auto; cursor: pointer;">
+                    <label for="delete-file-checkbox" style="margin: 0; cursor: pointer;">Delete file from system</label>
+                </div>
+                <div id="delete-error" class="error-text" style="display:none; margin-top: 10px; margin-bottom: 10px;"></div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button id="confirm-delete-btn" class="primary-btn" style="background: #ef4444; width: 100%;">Remove</button>
+                    <button id="cancel-delete-btn" class="cancel-btn" style="width: 100%; text-align: center;">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Overwrite Modal -->
+    <div id="overwrite-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content glass-container" style="max-width: 400px; width: 100%; position: relative;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; font-size: 1.25rem;">File Already Exists</h2>
+                <button id="close-overwrite-btn" style="background: none; border: none; color: #a1a1aa; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>A file with this name already exists in the system. Do you want to overwrite it?</p>
+                <p id="overwrite-filename" style="font-weight: 600; color: var(--text); word-break: break-all; margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;"></p>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button id="confirm-overwrite-btn" class="primary-btn" style="background: var(--accent); width: 100%;">Overwrite</button>
+                    <button id="cancel-overwrite-btn" class="cancel-btn" style="width: 100%; text-align: center;">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const isAuthorized = {{ 'true' if authorized else 'false' }};
 
@@ -186,6 +227,8 @@
             const urlInput = document.getElementById('url-input');
             const addErr = document.getElementById('add-error');
             const list = document.getElementById('downloads-list');
+            
+            let currentDownloadUrl = "";
 
             urlInput.addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
@@ -196,6 +239,10 @@
 
             addBtn.addEventListener('click', async () => {
                 const url = urlInput.value;
+                await startDownload(url, false);
+            });
+
+            async function startDownload(url, overwrite) {
                 if(!url) return;
                 
                 addBtn.disabled = true;
@@ -206,12 +253,18 @@
                     const res = await fetch('/api/downloads', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({url})
+                        body: JSON.stringify({url, overwrite})
                     });
                     const data = await res.json();
                     if(res.ok) {
-                        urlInput.value = "";
-                        fetchDownloads();
+                        if (data.status === "file_exists") {
+                            currentDownloadUrl = url;
+                            document.getElementById('overwrite-filename').innerText = data.file_name;
+                            document.getElementById('overwrite-modal').style.display = 'flex';
+                        } else {
+                            urlInput.value = "";
+                            fetchDownloads();
+                        }
                     } else {
                         addErr.innerText = data.detail || "Error adding URL";
                         addErr.style.display = 'block';
@@ -223,7 +276,18 @@
                 
                 addBtn.disabled = false;
                 addBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Download`;
-            });
+            }
+
+            // Overwrite Modal Logic
+            const overwriteModal = document.getElementById('overwrite-modal');
+            if (document.getElementById('close-overwrite-btn')) document.getElementById('close-overwrite-btn').onclick = () => overwriteModal.style.display = 'none';
+            if (document.getElementById('cancel-overwrite-btn')) document.getElementById('cancel-overwrite-btn').onclick = () => overwriteModal.style.display = 'none';
+            if (document.getElementById('confirm-overwrite-btn')) {
+                document.getElementById('confirm-overwrite-btn').onclick = () => {
+                    overwriteModal.style.display = 'none';
+                    startDownload(currentDownloadUrl, true);
+                };
+            }
 
             window.cancelDownload = async function(id) {
                 await fetch(`/api/downloads/${id}`, {method: 'DELETE'});
@@ -231,8 +295,7 @@
             }
 
             window.restartDownload = function(url) {
-                document.getElementById('url-input').value = url;
-                document.getElementById('add-btn').click();
+                startDownload(url, false);
             }
 
             function formatBytes(mb) {
@@ -254,6 +317,22 @@
                     document.getElementById('connection-text').innerText = 'Disconnected';
                 }
             }
+
+            const evtSource = new EventSource('/api/stream_downloads');
+            
+            evtSource.onmessage = function(event) {
+                const downloads = JSON.parse(event.data);
+                renderDownloads(downloads);
+                document.getElementById('connection-status').className = 'dot active';
+                document.getElementById('connection-text').innerText = 'Connected';
+            };
+            
+            evtSource.onerror = function() {
+                document.getElementById('connection-status').className = 'dot inactive';
+                document.getElementById('connection-text').innerText = 'Disconnected';
+            };
+
+            fetchDownloads();
 
             function renderDownloads(downloads) {
                 const keys = Object.keys(downloads).sort((a, b) => {
@@ -295,6 +374,12 @@
                         actionBtn = `<a href="/api/download_file/${key}" download class="save-pc-btn" style="text-decoration:none; background:var(--accent); color:white; padding:6px 14px; border-radius:6px; font-size:0.8rem; font-weight:600; display:inline-block; transition:0.2s;">Save to PC &darr;</a>`;
                     } else if (d.status === "cancelled" || d.status.startsWith("error")) {
                         actionBtn = `<button class="cancel-btn" style="color:var(--accent); border-color:var(--accent);" onclick="restartDownload('${d.url}')">Restart</button>`;
+                    }
+                    
+                    if (d.status === "done" || d.status === "cancelled" || d.status.startsWith("error")) {
+                        actionBtn += `<button class="delete-icon-btn" onclick="openDeleteModal('${key}')" style="background:none; border:none; color:#ef4444; cursor:pointer; padding:6px; margin-left:8px; display:inline-flex; align-items:center; justify-content:center; vertical-align:middle; transition:0.2s;" title="Remove">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </button>`;
                     }
 
                     let card = document.querySelector(`.download-card[data-id="${key}"]`);
@@ -374,9 +459,8 @@
                 }
             }
 
-            // Poll every 1 second
-            setInterval(fetchDownloads, 1000);
-            fetchDownloads();
+            // Initial fetch handled by SSE fallback or manual
+            // fetchDownloads();
         }
 
         // Global Settings logic
@@ -467,6 +551,58 @@
                 
                 saveSettingsBtn.disabled = false;
                 saveSettingsBtn.innerText = "Save Settings";
+            });
+        }
+
+        // Delete Logic
+        let deleteTargetId = null;
+        const deleteModal = document.getElementById('delete-modal');
+        const closeDeleteBtn = document.getElementById('close-delete-btn');
+        const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+        const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+        const deleteError = document.getElementById('delete-error');
+        const deleteFileCheckbox = document.getElementById('delete-file-checkbox');
+
+        window.openDeleteModal = function(id) {
+            deleteTargetId = id;
+            deleteFileCheckbox.checked = false;
+            deleteError.style.display = 'none';
+            deleteModal.style.display = 'flex';
+        };
+        
+        if (closeDeleteBtn) closeDeleteBtn.addEventListener('click', () => deleteModal.style.display = 'none');
+        if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', () => deleteModal.style.display = 'none');
+        
+        if (confirmDeleteBtn) {
+            confirmDeleteBtn.addEventListener('click', async () => {
+                if (!deleteTargetId) return;
+                
+                const deleteFile = deleteFileCheckbox.checked;
+                confirmDeleteBtn.disabled = true;
+                confirmDeleteBtn.innerText = "Removing...";
+                deleteError.style.display = 'none';
+                
+                try {
+                    const res = await fetch(`/api/downloads/${deleteTargetId}/remove`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({delete_file: deleteFile})
+                    });
+                    if (res.ok) {
+                        deleteModal.style.display = 'none';
+                        if (typeof fetchDownloads === 'function') fetchDownloads();
+                    } else {
+                        const data = await res.json();
+                        deleteError.innerText = data.detail || "Error removing item";
+                        deleteError.style.display = 'block';
+                    }
+                } catch(e) {
+                    deleteError.innerText = e.toString();
+                    deleteError.style.display = 'block';
+                }
+                
+                confirmDeleteBtn.disabled = false;
+                confirmDeleteBtn.innerText = "Remove";
             });
         }
     </script>

@@ -118,6 +118,7 @@ async def verify_code(req: CodeRequest):
 
 class URLRequest(BaseModel):
     url: str
+    overwrite: bool = False
 
 async def download_worker(message, msg_id, url):
     file_size = getattr(message.file, "size", 0)
@@ -172,9 +173,23 @@ async def download_worker(message, msg_id, url):
                     pass
             output_path = fr"{full_smb_dir}\{file_name}"
             queue_info[msg_id]["output_path"] = output_path
-            file_obj = smbclient.open_file(output_path, mode="wb", username=user, password=password)
+            
+            for attempt in range(3):
+                try:
+                    file_obj = smbclient.open_file(output_path, mode="wb", username=user, password=password)
+                    break
+                except Exception as open_e:
+                    err_str = str(open_e).upper()
+                    if ("STATUS_DELETE_PENDING" in err_str or "0XC0000056" in err_str or "STATUS_SHARING_VIOLATION" in err_str or "0XC0000043" in err_str) and attempt < 2:
+                        await asyncio.sleep(2.0)
+                    else:
+                        raise open_e
         except Exception as e:
-            queue_info[msg_id]["status"] = f"error: SMB connect failed - {str(e)}"
+            err_msg = str(e).upper()
+            if "STATUS_SHARING_VIOLATION" in err_msg or "0XC0000043" in err_msg:
+                queue_info[msg_id]["status"] = "error: File is open in another program"
+            else:
+                queue_info[msg_id]["status"] = f"error: SMB connect failed - {str(e)}"
             if msg_id in active_downloads:
                 del active_downloads[msg_id]
             return
@@ -287,6 +302,59 @@ async def add_download(req: URLRequest):
     if msg_id in queue_info and queue_info[msg_id]["status"] in ["queue", "downloading"]:
         return {"status": "already_queued"}
 
+    ext = getattr(message.file, "ext", ".mp4") or ".mp4"
+    file_name = None
+    if message.file and getattr(message.file, "name", None):
+        safe_name = re.sub(r'[\\/*?:"<>|]', "", message.file.name)
+        base_name, _ = os.path.splitext(safe_name)
+        if base_name:
+            file_name = f"{base_name}_{msg_id}{ext}"
+            
+    if not file_name:
+        file_name = f"video_{msg_id}{ext}"
+
+    if not req.overwrite:
+        settings = load_settings()
+        file_exists = False
+        
+        if settings.get("storage_type") == "smb":
+            server = settings.get("smb_server", "")
+            share = settings.get("smb_share", "")
+            smb_path = settings.get("smb_path", "")
+            user = settings.get("smb_user", "")
+            password = settings.get("smb_pass", "")
+            
+            try:
+                smbclient.register_session(server, username=user, password=password)
+                share = share.strip("\\/")
+                smb_path = smb_path.strip("\\/")
+                full_smb_dir = fr"\\{server}\{share}\{smb_path}" if smb_path else fr"\\{server}\{share}"
+                output_path = fr"{full_smb_dir}\{file_name}"
+                
+                try:
+                    smbclient.stat(output_path, username=user, password=password)
+                    file_exists = True
+                except Exception:
+                    pass
+            except Exception:
+                pass
+        else:
+            local_dir = settings.get("local_path") or DOWNLOADS_DIR
+            output_path = os.path.join(local_dir, file_name)
+            file_exists = os.path.exists(output_path)
+            
+        if file_exists:
+            return {"status": "file_exists", "msg_id": msg_id, "file_name": file_name}
+
+    if msg_id in active_downloads:
+        old_task = active_downloads[msg_id]
+        if not old_task.done():
+            old_task.cancel()
+            try:
+                await asyncio.wait_for(old_task, timeout=5.0)
+            except Exception:
+                pass
+
     task = asyncio.create_task(download_worker(message, msg_id, url))
     active_downloads[msg_id] = task
     
@@ -296,13 +364,108 @@ async def add_download(req: URLRequest):
 async def get_downloads():
     return {"downloads": queue_info}
 
+from fastapi.responses import StreamingResponse
+
+@app.get("/api/stream_downloads")
+async def stream_downloads(request: Request):
+    async def event_generator():
+        last_state_str = ""
+        while True:
+            if await request.is_disconnected():
+                break
+            
+            current_state_str = json.dumps(queue_info)
+            if current_state_str != last_state_str:
+                yield f"data: {current_state_str}\n\n"
+                last_state_str = current_state_str
+                
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 @app.delete("/api/downloads/{msg_id}")
 async def cancel_download(msg_id: int):
     if msg_id in active_downloads:
-        active_downloads[msg_id].cancel()
+        task = active_downloads[msg_id]
+        task.cancel()
+        try:
+            await asyncio.wait_for(task, timeout=2.0)
+        except Exception:
+            pass
     if msg_id in queue_info:
         queue_info[msg_id]["status"] = "cancelled"
     return {"status": "ok"}
+
+class RemoveRequest(BaseModel):
+    delete_file: bool = False
+
+@app.post("/api/downloads/{msg_id}/remove")
+async def remove_download(msg_id: int, req: RemoveRequest):
+    if msg_id in active_downloads:
+        task = active_downloads[msg_id]
+        task.cancel()
+        try:
+            await asyncio.wait_for(task, timeout=2.0)
+        except Exception:
+            pass
+        active_downloads.pop(msg_id, None)
+        
+    info = queue_info.get(msg_id)
+    if info:
+        if req.delete_file:
+            path = info.get("output_path")
+            storage_type = info.get("storage_type")
+            
+            # small delay to ensure OS released the file handle
+            await asyncio.sleep(0.5)
+            
+            if storage_type == "local" and path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception as e:
+                    print(f"Error deleting file {path}: {e}")
+                    raise HTTPException(status_code=400, detail=f"Cannot delete local file: {str(e)}")
+            elif storage_type == "smb" and path:
+                try:
+                    settings = load_settings()
+                    user = settings.get("smb_user", "")
+                    password = settings.get("smb_pass", "")
+                    server = settings.get("smb_server", "")
+                    smbclient.register_session(server, username=user, password=password)
+                    try:
+                        smbclient.remove(path, username=user, password=password)
+                    except Exception as e:
+                        err_msg = str(e).upper()
+                        if "STATUS_OBJECT_NAME_NOT_FOUND" in err_msg or "0XC0000034" in err_msg or "OBJECT_NAME_NOT_FOUND" in err_msg:
+                            pass # already deleted
+                        elif "STATUS_SHARING_VIOLATION" in err_msg or "0XC0000043" in err_msg or "STATUS_DELETE_PENDING" in err_msg or "0XC0000056" in err_msg:
+                            raise HTTPException(status_code=400, detail="Cannot delete: File is open in another program (Pending Delete)")
+                        else:
+                            raise HTTPException(status_code=400, detail=f"SMB remove error: {str(e)}")
+                    
+                    # Verify it's actually deleted
+                    try:
+                        smbclient.stat(path, username=user, password=password)
+                        # If stat succeeds, the file is STILL THERE (e.g. silently locked)
+                        raise HTTPException(status_code=400, detail="Cannot delete: File is locked by another program")
+                    except HTTPException:
+                        raise
+                    except Exception as stat_e:
+                        stat_err = str(stat_e).upper()
+                        if "STATUS_DELETE_PENDING" in stat_err or "0XC0000056" in stat_err:
+                            raise HTTPException(status_code=400, detail="Cannot delete: File is open in another program (Pending Delete)")
+                        # If Object Name Not Found, it's successfully deleted
+                        
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    print(f"Error deleting smb file {path}: {e}")
+                    raise HTTPException(status_code=400, detail=f"Error deleting smb file: {str(e)}")
+        del queue_info[msg_id]
+        if msg_id in speed_history:
+            del speed_history[msg_id]
+    return {"status": "ok"}
+
 
 @app.get("/api/download_file/{msg_id}")
 async def download_file(msg_id: int):
